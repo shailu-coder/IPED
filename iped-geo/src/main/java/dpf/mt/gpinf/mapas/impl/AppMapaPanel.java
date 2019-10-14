@@ -53,6 +53,7 @@ public class AppMapaPanel extends JPanel {
     }
 
     public void redesenhaMapa() {
+        System.out.println("redesenhaMapa called");
         if (mapaDesatualizado && (resultsProvider.getResults().getLength() > 0)) {
             // se todo o modelo estiver desatualizado, gera novo KML e recarrega todo o mapa
             if (!browserCanvas.isConnected()) {
@@ -65,6 +66,8 @@ public class AppMapaPanel extends JPanel {
                     c.repaint();
                 }
                 repaint();
+                
+                System.out.println("repaint called");
             }
 
             String kml = ""; //$NON-NLS-1$

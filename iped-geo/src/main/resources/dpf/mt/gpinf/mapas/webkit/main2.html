@@ -1,0 +1,196 @@
+<html> 
+    <head>
+		<meta http-equiv="Content-type" content="text/html; charset=utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+		
+		<style type="text/css" media="screen">
+			body { margin:0px;padding:0px }
+		</style>
+				
+		<link rel="stylesheet" href="./leaflet.css" />
+		<script>L_DISABLE_3D = true;</script>
+		<script type="text/javascript" src="./leaflet.js"></script>
+		<script type="text/javascript" src="./L.KML.js"></script>
+		
+        <script>
+    
+    var mymap;
+    var bounds;
+    var mpos = 0;
+    var numMarkers = 0;
+    
+    function initialize() {
+    
+    	mpos = 0;
+    	
+    	mymap = L.map('leaflet_map').setView([51.505, -0.09], 13);
+    	L.tileLayer('https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token={accessToken}', {
+			attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, <a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
+			maxZoom: 18,
+			id: 'mapbox.streets',
+			accessToken: 'pk.eyJ1IjoibGZjbmFzc2lmIiwiYSI6ImNrMTNvcjd4NzBibXUzaW56Nm96MjVndDUifQ.C7hICSuvbW-CxvRjH9SpKg',
+			useCache: true,
+			crossOrigin: true
+			
+		}).addTo(mymap);
+        
+        /*/
+		mymap = new L.Map(document.getElementById("leaflet_map"), {
+			layers: new L.TileLayer("http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"),
+			zoomAnimation : false
+		});
+		*/
+		
+		// Create new kml overlay
+        const parser = new DOMParser();
+        var kml = parser.parseFromString('{{kml}}', 'text/xml');
+        const track = new L.KML(kml);
+        mymap.addLayer(track);
+
+        // Adjust map to show the kml
+        bounds = track.getBounds();
+        mymap.fitBounds(bounds);
+        
+        console.log("Finished map loading.");
+        
+        mymap.eachLayer(function(layer){
+        	if(typeof layer.options.marker_id != 'undefined'){
+				ajustaIcone(layer);
+				numMarkers++;
+			}
+        });
+    }
+    
+    function updateMarkerCheckbox(mid, marcado) {
+		mymap.eachLayer(function(layer){
+			if(layer.options.marker_id == mid){
+				ckbox = document.getElementById("ck_marcador_"+mid);
+				if(marcado == 'true'){
+					layer.options.checked = 'false';
+					if(ckbox != null)
+						ckbox.checked = false;
+				}else{
+					layer.options.checked = 'true';
+					if(ckbox != null)
+						ckbox.checked = true;
+				}
+				ajustaIcone(layer);
+			}
+		});
+	}
+	
+	function ajustaIcone(layer){
+		if(layer.options.selected == 'true'){
+			if(layer.options.checked == 'true')
+				layer.setIcon(L.icon({iconUrl: 'images/marker-icon-checked-selected.png', shadowUrl: 'images/marker-shadow.png', popupAnchor:[1,-34]}));
+			else
+				layer.setIcon(L.icon({iconUrl: 'images/marker-icon-selected.png', shadowUrl: 'images/marker-shadow.png', popupAnchor:[1,-34]}));
+		}else{
+			if(layer.options.checked == 'true')
+				layer.setIcon(L.icon({iconUrl: 'images/marker-icon-checked.png', shadowUrl: 'images/marker-shadow.png', popupAnchor:[1,-34]}));
+			else
+				layer.setIcon(L.icon({iconUrl: 'images/marker-icon.png', shadowUrl: 'images/marker-shadow.png', popupAnchor:[1,-34]}));
+		}
+	}
+	
+	function selectMarker(mid, selecionado) {
+		count = -1;
+		console.log(mid + "=" + selecionado + " mpos=" + mpos);
+		mymap.eachLayer(function(layer){
+			if(typeof layer.options.marker_id != 'undefined')
+				count++;
+			if(layer.options.marker_id == mid){
+				if(selecionado == 'true'){
+					layer.options.selected = 'true';
+					mpos = count;
+				}else{
+					layer.options.selected = 'false';
+				}
+				ajustaIcone(layer);
+			}		
+		});
+		console.log(mid + "=" + selecionado + " mpos2=" + mpos);
+	}
+	
+	function flyToSelectedMarker() {
+		var done = false;
+		mymap.eachLayer(function(layer){
+			if(layer.options.selected == 'true' && !done){
+				mymap.panTo(layer.getLatLng());
+				done = true;
+			}
+		});
+	}
+	
+	function navega(){
+    	if(mpos<0){
+    		mpos=0;
+    		alert('The navigation already is on the first item.');
+    		return false;
+    	}
+    	if(mpos>=numMarkers){
+    		mpos=numMarkers-1;
+    		alert('The navigation already is on the last item.')
+    		return false;
+    	}
+    	count = 0;
+    	mymap.eachLayer(function(layer){
+        	if(typeof layer.options.marker_id != 'undefined'){
+        		if(count++ == mpos){
+        			layer.fire('click');
+        		}
+        	}
+        });
+    	return false;
+    }
+    
+    function zoomOut(){
+    	mymap.fitBounds(bounds);
+    }
+    
+    function exportarKml(){
+    	window.app.exportarKmlBF();
+    }
+    
+    function toogleVisibility(){
+    	if(document.getElementById("barra_content").style.display == "none"){
+        	document.getElementById("td_barra").style.width="50px";
+        	document.getElementById("barra_content").style.display = "block";
+        	document.getElementById("toogleVisibilityButton").innerHTML = "-";
+    	}else{
+        	document.getElementById("td_barra").style.width="10px";
+        	document.getElementById("barra_content").style.display = "none";
+        	document.getElementById("toogleVisibilityButton").innerHTML = "+";
+    	}
+    }
+	</script>
+    </head>
+    <body onload="initialize();">
+    <table style="height:100%;width:100%"><tr><td>
+  		<div id="leaflet_map" style="width:100%;height:100%;"></div></td>
+    	<td width="50px" id="td_barra">
+   		<div id="barra_lateral" style="height:100%;width:100%;">
+   		<a href="#" onclick="toogleVisibility();" id="toogleVisibilityButton">-</a>
+   		<div id="barra_content" style="width:100%; border:0px;">
+   	 		<div id="resultsinfo" style="width:100px"></div>
+   	 		<div style="background-color:#666666; color:white; border:1px solid #000000;">Selection:</div>
+   			<input type="button" name="selecaoRetangular" value="Area" onclick="map.dragSelect.activateAreaDrag();" style="width:100%"/>
+   			<input type="button" name="selecaoRaio" value="Radius" onclick="map.dragSelect.activateRadiusDrag();" style="width:100%"/>
+   	 		<div style="background-color:#666666; color:white; border:1px solid #000000;">Sorting:</div>
+   	 		<div style="width:100px; font-size:80%; min-height:20px" id="ordem_descr"></div>
+   	 		<div style="background-color:#666666; color:white; border:1px solid #000000;">Navigation:</div>
+   			<input type="button" name="primeiro" value="First" onclick="mpos=0;navega();" style="width:100%"/>
+   			<input type="button" name="anterior" value="Previous" onclick="mpos--;navega();" style="width:100%"/>
+   			<input type="button" name="proximo" value="Next" onclick="mpos++;navega();" style="width:100%"/>
+   			<input type="button" name="ultimo" value="Last" onclick="mpos=numMarkers-1;navega();" style="width:100%"/>
+   	 		<br/><br/>
+   			<input type="button" name="zoomout" value="Display All" onclick="zoomOut();" style="width:100%"/>
+   			<input type="button" name="zoomout" value="Export KML" onclick="exportarKml();" style="width:100%"/>
+			<div style="position:absolute; bottom:20px; border:1px;" id="distancia_calc"></div>
+		</div>
+   </div>
+   </td></tr>
+</table>
+    </body>
+    <div id="the_side_bar" style="position:fixed;float:right;height:100%;width:100%; visibility:hidden"></div>    
+</html>
