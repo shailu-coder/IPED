@@ -56,6 +56,7 @@ import dpf.sp.gpinf.indexer.Messages;
 import dpf.sp.gpinf.indexer.config.ConfigurationManager;
 import dpf.sp.gpinf.indexer.config.UFEDReaderConfig;
 import dpf.sp.gpinf.indexer.parsers.ufed.UFEDChatParser;
+import dpf.sp.gpinf.indexer.parsers.util.PhoneParsingConfig;
 import dpf.sp.gpinf.indexer.process.IndexItem;
 import dpf.sp.gpinf.indexer.process.task.ImageThumbTask;
 import dpf.sp.gpinf.indexer.util.IOUtil;
@@ -93,7 +94,7 @@ public class UfedXmlReader extends DataSourceReader {
     private static final String ESCAPED_UFED_ID = QueryParserUtil.escape(UFED_ID);
     private static final String EMPTY_EXTRACTION_STR = "-";
 
-    private static final Set<String> SUPPORTED_APPS = new HashSet<String>(
+    private final Set<String> supportedApps = new HashSet<String>(
             Arrays.asList(WhatsAppParser.WHATSAPP, TelegramParser.TELEGRAM));
 
     File root, ufdrFile;
@@ -206,14 +207,22 @@ public class UfedXmlReader extends DataSourceReader {
     }
 
     private void configureParsers() {
+        configureParsers(null);
+    }
+
+    private void configureParsers(Boolean isIOS) {
 
         UFEDReaderConfig ufedReaderConfig = (UFEDReaderConfig) ConfigurationManager.getInstance()
                 .findObjects(UFEDReaderConfig.class).iterator().next();
 
-        // TODO enable TelegramParser for UFDR in next major release
+        PhoneParsingConfig.setUfdrReaderName(UfedXmlReader.class.getSimpleName());
+
         if (!TelegramParser.isEnabledForUfdr()) {
-            TelegramParser.setSupportedTypes(Collections.EMPTY_SET);
-            SUPPORTED_APPS.remove(TelegramParser.TELEGRAM);
+            supportedApps.remove(TelegramParser.TELEGRAM);
+        }
+        
+        if (isIOS != null && isIOS && !TelegramParser.isEnabledForIOS()) {
+            supportedApps.remove(TelegramParser.TELEGRAM);
         }
 
         if (ufedReaderConfig.getPhoneParsersToUse().equals("internal")) { //$NON-NLS-1$
@@ -221,8 +230,7 @@ public class UfedXmlReader extends DataSourceReader {
             ignoreSupportedChats = true;
 
         } else if (ufedReaderConfig.getPhoneParsersToUse().equals("external")) { //$NON-NLS-1$
-            WhatsAppParser.setSupportedTypes(Collections.EMPTY_SET);
-            TelegramParser.setSupportedTypes(Collections.EMPTY_SET);
+            PhoneParsingConfig.enableExternalPhoneParsersOnly();
         }
     }
 
@@ -254,7 +262,7 @@ public class UfedXmlReader extends DataSourceReader {
             rootItem.setRoot(true);
             rootItem.setName(evidenceName);
         }
-        rootItem.setExtraAttribute("X-Reader", this.getClass().getSimpleName());
+        rootItem.setExtraAttribute(ExtraProperties.DATASOURCE_READER, this.getClass().getSimpleName());
 
         pathToParent.put(rootItem.getPath(), rootItem);
 
@@ -274,6 +282,7 @@ public class UfedXmlReader extends DataSourceReader {
         decodedFolder.setIsDir(true);
         decodedFolder.setHasChildren(true);
         decodedFolder.setHash(""); //$NON-NLS-1$
+        decodedFolder.setExtraAttribute(ExtraProperties.DATASOURCE_READER, UfedXmlReader.class.getSimpleName());
 
         pathToParent.put(decodedFolder.getPath(), decodedFolder);
 
@@ -444,6 +453,7 @@ public class UfedXmlReader extends DataSourceReader {
             // parent.setLength(0L);
             parent.setHash(""); //$NON-NLS-1$
             parent.setParent(getParent(parentPath));
+            parent.setExtraAttribute(ExtraProperties.DATASOURCE_READER, UfedXmlReader.class.getSimpleName());
 
             pathToParent.put(parentPath, parent);
 
@@ -485,7 +495,7 @@ public class UfedXmlReader extends DataSourceReader {
                 }
 
                 Item item = new Item();
-
+                item.setExtraAttribute(ExtraProperties.DATASOURCE_READER, UfedXmlReader.class.getSimpleName());
                 item.setLength(size);
 
                 String fs = "/" + atts.getValue("fs"); //$NON-NLS-1$ //$NON-NLS-2$
@@ -512,7 +522,7 @@ public class UfedXmlReader extends DataSourceReader {
                     }
 
                     Item item = new Item();
-
+                    item.setExtraAttribute(ExtraProperties.DATASOURCE_READER, UfedXmlReader.class.getSimpleName());
                     String type = atts.getValue("type"); //$NON-NLS-1$
                     if (type.equals("Chat"))
                         inChat = true;
@@ -544,6 +554,7 @@ public class UfedXmlReader extends DataSourceReader {
                     }
 
                     Item item = new Item();
+                    item.setExtraAttribute(ExtraProperties.DATASOURCE_READER, UfedXmlReader.class.getSimpleName());
                     IItem parent = itemSeq.get(itemSeq.size() - 1);
 
                     String name = type + "_" + atts.getValue("id"); //$NON-NLS-1$ //$NON-NLS-2$
@@ -617,6 +628,14 @@ public class UfedXmlReader extends DataSourceReader {
             XmlNode parentNode = null;
             if (nodeSeq.size() > 0)
                 parentNode = nodeSeq.get(nodeSeq.size() - 1);
+
+            String metadataSection = parentNode != null ? parentNode.atts.get("section") : null;
+            if ("Extraction Data".equals(metadataSection) || "Device Info".equals(metadataSection)) {
+                String val = chars.toString().toLowerCase();
+                if (val.contains("apple") || val.contains("iphone")) {
+                    configureParsers(true);
+                }
+            }
 
             if (("MSISDN".equals(nameAttr) || "LastUsedMSISDN".equals(nameAttr)) && parentNode != null
                     && "Device Info".equals(parentNode.atts.get("section"))) {
@@ -692,7 +711,7 @@ public class UfedXmlReader extends DataSourceReader {
                         else if (item != null && !value.isEmpty()) {
                             item.getMetadata().add(meta, value);
                             if (inChat && ignoreSupportedChats && parentNameAttr.equals("Source")
-                                    && SUPPORTED_APPS.contains(value)) {
+                                    && supportedApps.contains(value)) {
                                 ignoreItems = true;
                             }
                         }
@@ -896,6 +915,7 @@ public class UfedXmlReader extends DataSourceReader {
             if ("Device Info".equals(currentNode.atts.get("section"))) {
                 if (!deviceInfoData.isEmpty()) {
                     item = new Item();
+                    item.setExtraAttribute(ExtraProperties.DATASOURCE_READER, UfedXmlReader.class.getSimpleName());
                     String name = Messages.getString("UfedXmlReader.DeviceInfo");
                     item.setName(name);
                     item.setParent(rootItem);

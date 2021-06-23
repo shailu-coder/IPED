@@ -25,6 +25,7 @@ import java.io.InputStream;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Base64;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -55,6 +56,7 @@ import dpf.ap.gpinf.interfacetelegram.DecoderTelegramInterface;
 import dpf.sp.gpinf.indexer.parsers.IndexerDefaultParser;
 import dpf.sp.gpinf.indexer.parsers.jdbc.SQLite3DBParser;
 import dpf.sp.gpinf.indexer.parsers.util.ItemInfo;
+import dpf.sp.gpinf.indexer.parsers.util.PhoneParsingConfig;
 import iped3.io.IItemBase;
 import iped3.search.IItemSearcher;
 import iped3.util.BasicProps;
@@ -78,7 +80,7 @@ public class TelegramParser extends SQLite3DBParser {
     public static final MediaType TELEGRAM_ATTACHMENT = MediaType.parse("message/x-telegram-attachment");
     public static final MediaType TELEGRAM_CALL = MediaType.parse("call/x-telegram-call");
 
-    private static Set<MediaType> SUPPORTED_TYPES = MediaType.set(TELEGRAM_DB, TELEGRAM_USER_CONF, TELEGRAM_DB_IOS);
+    private static Set<MediaType> SUPPORTED_TYPES = new HashSet<>(MediaType.set(TELEGRAM_DB, TELEGRAM_USER_CONF));
 
     // TODO improve this: prefix to show 'attachment' before body text (values
     // are sorted)
@@ -88,6 +90,7 @@ public class TelegramParser extends SQLite3DBParser {
     private static final String ATTACHMENT_MESSAGE = ATTACHMENT_PREFIX + "Attachment: ";
 
     private static boolean enabledForUfdr = false;
+    private static boolean enabledForIOS = false;
 
     private boolean extractMessages = true;
 
@@ -95,17 +98,25 @@ public class TelegramParser extends SQLite3DBParser {
         return SUPPORTED_TYPES;
     }
 
-    public static void setSupportedTypes(Set<MediaType> supportedTypes) {
-        SUPPORTED_TYPES = supportedTypes;
-    }
-
     public static boolean isEnabledForUfdr() {
         return enabledForUfdr;
+    }
+
+    public static boolean isEnabledForIOS() {
+        return enabledForIOS;
     }
 
     @Field
     public void setEnabledForUfdr(boolean enable) {
         enabledForUfdr = enable;
+    }
+
+    @Field
+    public void setEnabledForIOS(boolean enable) {
+        enabledForIOS = enable;
+        if (enabledForIOS) {
+            SUPPORTED_TYPES.add(TELEGRAM_DB_IOS);
+        }
     }
 
     @Field
@@ -448,6 +459,12 @@ public class TelegramParser extends SQLite3DBParser {
 
     public void parse(InputStream stream, ContentHandler handler, Metadata metadata, ParseContext context)
             throws IOException, SAXException, TikaException {
+
+        IItemBase item = context.get(IItemBase.class);
+        if ((!enabledForUfdr || PhoneParsingConfig.isExternalPhoneParsersOnly())
+                && PhoneParsingConfig.isFromUfdrDatasourceReader(item)) {
+            return;
+        }
 
         String mimetype = metadata.get(IndexerDefaultParser.INDEXER_CONTENT_TYPE);
         if (mimetype.equals(TELEGRAM_DB.toString())) {
